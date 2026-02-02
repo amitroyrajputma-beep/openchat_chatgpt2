@@ -2,6 +2,7 @@
 <html>
 <head>
   <title>Admin Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
 
@@ -13,48 +14,54 @@
 <script src="firebase.js"></script>
 
 <script>
-const box = document.getElementById("list");
+const list = document.getElementById("list");
 
-firebase.database().ref("requests").on("value", snap=>{
-  box.innerHTML = "";
+firebase.database().ref("requests").on("value", snapshot => {
+  list.innerHTML = "";
 
-  snap.forEach(c=>{
-    const d = c.val();
-    if(d.status !== "pending") return;
+  snapshot.forEach(child => {
+    const data = child.val();
+    if (data.status !== "pending") return;
 
-    const div = document.createElement("div");
-    div.innerHTML = `
-      <b>${d.name}</b><br>
-      <input id="room-${c.key}" placeholder="Room name">
-      <button>Approve</button>
-      <button>Reject</button>
+    const row = document.createElement("div");
+
+    row.innerHTML = `
+      <p><b>${data.name}</b></p>
+      <input type="text" placeholder="Room name" class="roomInput">
+      <button class="approveBtn">Approve</button>
+      <button class="rejectBtn">Reject</button>
       <hr>
     `;
 
-    // APPROVE
-    div.children[2].onclick = () => {
-      const room = document.getElementById("room-"+c.key).value.trim();
-      if(!room) return alert("Enter room name");
+    const roomInput = row.querySelector(".roomInput");
+    const approveBtn = row.querySelector(".approveBtn");
+    const rejectBtn = row.querySelector(".rejectBtn");
 
-      firebase.database().ref("requests/"+c.key).set({
-        name: d.name,
+    approveBtn.onclick = () => {
+      const room = roomInput.value.trim();
+      if (!room) {
+        alert("Room required");
+        return;
+      }
+
+      firebase.database().ref("requests/" + child.key).set({
+        name: data.name,
         status: "approved",
         room: room,
-        time: d.time
+        time: data.time
       });
     };
 
-    // REJECT
-    div.children[3].onclick = () => {
-      firebase.database().ref("requests/"+c.key).set({
-        name: d.name,
+    rejectBtn.onclick = () => {
+      firebase.database().ref("requests/" + child.key).set({
+        name: data.name,
         status: "rejected",
         room: "",
-        time: d.time
+        time: data.time
       });
     };
 
-    box.appendChild(div);
+    list.appendChild(row);
   });
 });
 </script>
