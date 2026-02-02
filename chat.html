@@ -2,91 +2,127 @@
 <html>
 <head>
   <title>Chat Room</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    video{width:45%;border:1px solid}
+    video { width: 45%; border: 1px solid #000; }
+    #chat { height: 200px; overflow-y: auto; border: 1px solid #ccc; }
   </style>
 </head>
 <body>
 
-<h3 id="room"></h3>
+<h3 id="roomTitle"></h3>
 
-<video id="local" autoplay muted></video>
-<video id="remote" autoplay></video><br><br>
-<button onclick="startCall()">Start Video Call</button>
+<div>
+  <video id="localVideo" autoplay muted></video>
+  <video id="remoteVideo" autoplay></video>
+</div>
+
+<br>
+<button onclick="startVideo()">📹 Start Video Call</button>
 
 <hr>
 
-<div id="chat" style="height:200px;overflow:auto;border:1px solid"></div>
-<input id="msg">
-<button onclick="send()">Send</button>
+<div id="chat"></div>
+<input id="msg" placeholder="Type message">
+<button onclick="sendMsg()">Send</button>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 <script src="firebase.js"></script>
 
 <script>
-const q=new URLSearchParams(location.search);
-const room=q.get("room"), name=q.get("name");
-document.getElementById("room").innerText="Room: "+room;
+const params = new URLSearchParams(location.search);
+const room = params.get("room");
+document.getElementById("roomTitle").innerText = "Room: " + room;
 
-// TEXT CHAT
-firebase.database().ref("chats/"+room)
-.on("child_added",s=>{
-  chat.innerHTML+=`<div><b>${s.val().name}:</b> ${s.val().msg}</div>`;
+const chatBox = document.getElementById("chat");
+const msgInput = document.getElementById("msg");
+
+const chatRef = firebase.database().ref("chats/" + room);
+
+chatRef.on("child_added", snap => {
+  const p = document.createElement("p");
+  p.innerText = snap.val();
+  chatBox.appendChild(p);
+  chatBox.scrollTop = chatBox.scrollHeight;
 });
 
-function send(){
-  firebase.database().ref("chats/"+room).push({
-    name,msg:msg.value,time:Date.now()
-  });
-  msg.value="";
+function sendMsg(){
+  if(msgInput.value.trim()){
+    chatRef.push(msgInput.value);
+    msgInput.value="";
+  }
 }
 
-// VIDEO CALL
-let pc=new RTCPeerConnection({
-  iceServers:[{urls:"stun:stun.l.google.com:19302"}]
-});
+/* ---------- VIDEO CALL LOGIC ---------- */
 
-navigator.mediaDevices.getUserMedia({video:true,audio:true})
-.then(s=>{
-  local.srcObject=s;
-  s.getTracks().forEach(t=>pc.addTrack(t,s));
-});
-
-pc.ontrack=e=>remote.srcObject=e.streams[0];
-pc.onicecandidate=e=>{
-  if(e.candidate)
-    firebase.database()
-      .ref("calls/"+room+"/candidates")
-      .push(JSON.stringify(e.candidate));
+let localStream;
+let pc;
+const servers = {
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
 };
 
-async function startCall(){
-  const offer=await pc.createOffer();
+async function startVideo(){
+  pc = new RTCPeerConnection(servers);
+
+  localStream = await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+  document.getElementById("localVideo").srcObject = localStream;
+
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+  pc.ontrack = e => {
+    document.getElementById("remoteVideo").srcObject = e.streams[0];
+  };
+
+  pc.onicecandidate = e => {
+    if(e.candidate){
+      firebase.database().ref("calls/"+room+"/candidates").push(JSON.stringify(e.candidate));
+    }
+  };
+
+  const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  firebase.database().ref("calls/"+room+"/offer")
-    .set(JSON.stringify(offer));
+
+  firebase.database().ref("calls/"+room+"/offer").set(JSON.stringify(offer));
 }
 
-firebase.database().ref("calls/"+room+"/offer")
-.on("value",async s=>{
-  if(!s.exists()||pc.currentRemoteDescription) return;
-  await pc.setRemoteDescription(JSON.parse(s.val()));
-  const ans=await pc.createAnswer();
-  await pc.setLocalDescription(ans);
-  firebase.database().ref("calls/"+room+"/answer")
-    .set(JSON.stringify(ans));
+firebase.database().ref("calls/"+room+"/offer").on("value", async snap=>{
+  if(!snap.exists() || pc) return;
+
+  pc = new RTCPeerConnection(servers);
+
+  localStream = await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+  document.getElementById("localVideo").srcObject = localStream;
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+  pc.ontrack = e=>{
+    document.getElementById("remoteVideo").srcObject = e.streams[0];
+  };
+
+  pc.onicecandidate = e=>{
+    if(e.candidate){
+      firebase.database().ref("calls/"+room+"/candidates").push(JSON.stringify(e.candidate));
+    }
+  };
+
+  const offer = JSON.parse(snap.val());
+  await pc.setRemoteDescription(offer);
+
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+
+  firebase.database().ref("calls/"+room+"/answer").set(JSON.stringify(answer));
 });
 
-firebase.database().ref("calls/"+room+"/answer")
-.on("value",async s=>{
-  if(s.exists()&&!pc.currentRemoteDescription)
-    pc.setRemoteDescription(JSON.parse(s.val()));
+firebase.database().ref("calls/"+room+"/answer").on("value", async snap=>{
+  if(!snap.exists() || !pc) return;
+  await pc.setRemoteDescription(JSON.parse(snap.val()));
 });
 
-firebase.database().ref("calls/"+room+"/candidates")
-.on("child_added",s=>{
-  pc.addIceCandidate(new RTCIceCandidate(JSON.parse(s.val())));
+firebase.database().ref("calls/"+room+"/candidates").on("child_added", snap=>{
+  if(pc){
+    pc.addIceCandidate(new RTCIceCandidate(JSON.parse(snap.val())));
+  }
 });
 </script>
 
