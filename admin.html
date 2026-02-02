@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Panel</title>
+</head>
+<body>
+
+<h2>Admin – Approve Users</h2>
+<div id="list"></div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+<script src="firebase.js"></script>
+
+<script>
+const box = document.getElementById("list");
+
+firebase.database().ref("requests").on("value", snap=>{
+  box.innerHTML="";
+  snap.forEach(c=>{
+    const d=c.val();
+    if(d.status!=="pending") return;
+
+    const div=document.createElement("div");
+    div.innerHTML=`
+      <b>${d.name}</b><br>
+      <input id="r-${c.key}" placeholder="Room name">
+      <button>Approve</button>
+      <button>Reject</button><hr>
+    `;
+
+    div.children[2].onclick=()=>{
+      const room=document.getElementById("r-"+c.key).value;
+      if(!room) return alert("Room required");
+      firebase.database().ref("requests/"+c.key)
+        .update({status:"approved",room});
+    };
+
+    div.children[3].onclick=()=>{
+      firebase.database().ref("requests/"+c.key)
+        .update({status:"rejected"});
+    };
+
+    box.appendChild(div);
+  });
+});
+</script>
+
+</body>
+</html>
