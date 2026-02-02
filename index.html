@@ -20,8 +20,7 @@ function request(){
   const name = document.getElementById("name").value.trim();
   if(!name) return alert("Enter name");
 
-  const ref = firebase.database().ref("requests").push();
-  ref.set({
+  const ref = firebase.database().ref("requests").push({
     name: name,
     status: "pending",
     room: "",
@@ -29,15 +28,22 @@ function request(){
   });
 
   document.getElementById("status").innerText =
-    "Request sent. Wait for admin approval.";
+    "Request sent. Waiting for admin approval...";
 
-  // listen for approval
   ref.on("value", s=>{
-    if(s.val().status==="approved"){
-      location.href="chat.html?name="+name+"&room="+s.val().room;
+    if(!s.exists()) return;
+
+    const data = s.val();
+
+    if(data.status === "approved" && data.room){
+      location.href =
+        "chat.html?name="+encodeURIComponent(name)+
+        "&room="+encodeURIComponent(data.room);
     }
-    if(s.val().status==="rejected"){
-      document.getElementById("status").innerText="Request rejected";
+
+    if(data.status === "rejected"){
+      document.getElementById("status").innerText =
+        "Your request was rejected by admin.";
     }
   });
 }
