@@ -16,29 +16,42 @@
 const box = document.getElementById("list");
 
 firebase.database().ref("requests").on("value", snap=>{
-  box.innerHTML="";
-  snap.forEach(c=>{
-    const d=c.val();
-    if(d.status!=="pending") return;
+  box.innerHTML = "";
 
-    const div=document.createElement("div");
-    div.innerHTML=`
+  snap.forEach(c=>{
+    const d = c.val();
+    if(d.status !== "pending") return;
+
+    const div = document.createElement("div");
+    div.innerHTML = `
       <b>${d.name}</b><br>
-      <input id="r-${c.key}" placeholder="Room name">
+      <input id="room-${c.key}" placeholder="Room name">
       <button>Approve</button>
-      <button>Reject</button><hr>
+      <button>Reject</button>
+      <hr>
     `;
 
-    div.children[2].onclick=()=>{
-      const room=document.getElementById("r-"+c.key).value;
-      if(!room) return alert("Room required");
-      firebase.database().ref("requests/"+c.key)
-        .update({status:"approved",room});
+    // APPROVE
+    div.children[2].onclick = () => {
+      const room = document.getElementById("room-"+c.key).value.trim();
+      if(!room) return alert("Enter room name");
+
+      firebase.database().ref("requests/"+c.key).set({
+        name: d.name,
+        status: "approved",
+        room: room,
+        time: d.time
+      });
     };
 
-    div.children[3].onclick=()=>{
-      firebase.database().ref("requests/"+c.key)
-        .update({status:"rejected"});
+    // REJECT
+    div.children[3].onclick = () => {
+      firebase.database().ref("requests/"+c.key).set({
+        name: d.name,
+        status: "rejected",
+        room: "",
+        time: d.time
+      });
     };
 
     box.appendChild(div);
